@@ -91,10 +91,10 @@ def create_production_files():
     # Create a production requirements.txt if it doesn't exist
     requirements_content = """fastapi==0.104.1
 uvicorn[standard]==0.24.0
-yt-dlp==2023.12.30
+yt-dlp>=2024.12.13
 python-multipart==0.0.6
 pydantic==2.5.2
-gunicorn==21.2.0
+gunicorn==22.0.0
 """
     
     with open('requirements.txt', 'w') as f:
