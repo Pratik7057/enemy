@@ -1,0 +1,55 @@
+{
+  "name": "RadhaAPI Backend",
+  "description": "Backend for RadhaAPI platform with YouTube API integration",
+  "repository": "https://github.com/your-username/radhaapi-backend",
+  "logo": "https://node-js-sample.herokuapp.com/node.png",
+  "keywords": ["node", "express", "mongodb", "jwt", "youtube-api"],
+  "image": "heroku/nodejs",
+  "stack": "heroku-22",
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "env": {
+    "NODE_ENV": {
+      "description": "Environment mode",
+      "value": "production"
+    },
+    "MONGODB_URI": {
+      "description": "MongoDB connection string from MongoDB Atlas",
+      "required": true
+    },
+    "JWT_SECRET": {
+      "description": "Secret key for JWT token generation",
+      "generator": "secret"
+    },
+    "YOUTUBE_API_KEY": {
+      "description": "YouTube Data API v3 key from Google Cloud Console",
+      "required": true
+    },
+    "CORS_ORIGIN": {
+      "description": "Allowed CORS origin URL",
+      "value": "https://www.radhaapi.me"
+    },
+    "PORT": {
+      "description": "Port number for the server",
+      "value": "5000"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  },
+  "addons": [
+    {
+      "plan": "heroku-postgresql:mini",
+      "as": "DATABASE"
+    }
+  ],
+  "scripts": {
+    "postdeploy": "echo 'Deployment completed successfully!'"
+  }
+}

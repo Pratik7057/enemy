@@ -1,0 +1,55 @@
+services:
+  - type: web
+    name: radhaapi
+    env: node
+    nodeVersion: 20.x
+    region: singapore # Choose a region that is fastest for your users
+    buildCommand: |
+      # Install root dependencies
+      npm install
+      # Install backend dependencies
+      cd backend && npm install
+      cd ..
+      # Install frontend dependencies and build
+      cd frontend
+      npm install
+      REACT_APP_API_URL=https://www.radhaapi.me/api npm run build
+      # Verify frontend build was created correctly
+      echo "Checking frontend build directory..."
+      ls -la build
+      echo "Checking for index.html in frontend build..."
+      ls -la build/index.html
+      cd ..
+      # Create directory structure and copy frontend build to backend public folder
+      mkdir -p backend/public/frontend-build
+      cp -r frontend/build/* backend/public/frontend-build/
+      
+      # Verify the files were copied successfully
+      echo "Verifying frontend build files were copied to backend/public/frontend-build..."
+      ls -la backend/public/frontend-build
+      echo "Checking for index.html in backend/public/frontend-build..."
+      ls -la backend/public/frontend-build/index.html
+      
+      # Verify the build was successful
+      node verify-build.js
+    startCommand: cd backend && node server.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    domains:
+      - www.radhaapi.me
+      - api.radhaapi.me
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false      
+      - key: PORT
+        value: 10000
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        value: https://www.radhaapi.me
+      - key: REACT_APP_API_URL
+        value: https://www.radhaapi.me/api

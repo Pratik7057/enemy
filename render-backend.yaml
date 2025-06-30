@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: radhaapi-backend
+    env: node
+    nodeVersion: 20.x
+    region: singapore
+    buildCommand: |
+      # Install dependencies
+      npm install
+      cd backend
+      npm install
+    startCommand: cd backend && node server.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    domains:
+      - www.radhaapi.me
+      - api.radhaapi.me
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: PORT
+        value: 10000
+      - key: YOUTUBE_API_KEY
+        sync: false
