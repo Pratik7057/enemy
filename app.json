@@ -1,17 +1,17 @@
 {
-  "name": "RadhaAPI Backend",
-  "description": "Backend for RadhaAPI platform with YouTube API integration",
-  "repository": "https://github.com/your-username/radhaapi-platform",
-  "logo": "https://node-js-sample.herokuapp.com/node.png",
-  "keywords": ["node", "express", "mongodb", "jwt", "youtube-api"],
+  "name": "RadhaAPI Python Backend",
+  "description": "FastAPI backend for RadhaAPI YouTube Audio Streaming platform",
+  "repository": "https://github.com/your-username/radhaapi-backend",
+  "website": "https://www.radhaapi.me",
+  "keywords": ["python", "fastapi", "youtube", "audio", "streaming", "yt-dlp"],
   "stack": "heroku-22",
   "buildpacks": [
     {
-      "url": "heroku/nodejs"
+      "url": "heroku/python"
     }
   ],
   "env": {
-    "NODE_ENV": {
+    "ENVIRONMENT": {
       "description": "Environment mode",
       "value": "production"
     },
