@@ -4,3 +4,5 @@ yt-dlp>=2024.12.13
 python-multipart==0.0.6
 pydantic==2.5.2
 gunicorn==22.0.0
+motor==3.3.2
+python-dotenv==1.0.0
