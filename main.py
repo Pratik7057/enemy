@@ -3,9 +3,10 @@ FastAPI backend for YouTube audio streaming
 Single endpoint: /get-audio?query=
 """
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import yt_dlp
 import logging
 import uvicorn
@@ -13,6 +14,13 @@ from typing import Optional
 import asyncio
 import functools
 import re
+import os
+from dotenv import load_dotenv
+from datetime import datetime
+import motor.motor_asyncio
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +40,91 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
+
+# MongoDB connection
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/radhaapi")
+client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URI)
+db = client.get_database()
+
+# Database connection events
+@app.on_event("startup")
+async def startup_db_client():
+    """Initialize database connection on startup"""
+    try:
+        # Test the connection
+        await client.admin.command('ping')
+        logger.info(f"Connected to MongoDB: {MONGODB_URI}")
+    except Exception as e:
+        logger.error(f"Could not connect to MongoDB: {e}")
+        raise e
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    """Close database connection on shutdown"""
+    client.close()
+    logger.info("Disconnected from MongoDB")
+
+# Security
+security = HTTPBearer(auto_error=False)
+
+# API Key validation
+async def validate_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Validate API key from Authorization header"""
+    if not credentials:
+        raise HTTPException(
+            status_code=403,
+            detail="Authorization header required. Use: Authorization: Bearer <API_KEY>"
+        )
+    
+    api_key = credentials.credentials
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=403,
+            detail="API key is required"
+        )
+    
+    # Find user with this API key
+    user = await db.users.find_one({"apiKey": api_key})
+    
+    if not user:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key"
+        )
+    
+    # Check if API key is expired
+    if user.get("apiKeyExpiresAt") and datetime.now() > user["apiKeyExpiresAt"]:
+        raise HTTPException(
+            status_code=403,
+            detail="API key has expired"
+        )
+    
+    # Check if API key is blocked
+    if user.get("apiKeyStatus") == "blocked":
+        # Log the blocked attempt
+        await db.youtubeapilogs.insert_one({
+            "user": user["_id"],
+            "apiKey": api_key,
+            "query": "blocked_attempt",
+            "ipAddress": "unknown",
+            "status": "failed",
+            "errorMessage": "API Key is blocked by admin.",
+            "createdAt": datetime.now()
+        })
+        
+        raise HTTPException(
+            status_code=403,
+            detail="API Key is blocked by admin."
+        )
+    
+    # Increment usage count
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$inc": {"apiKeyUsageCount": 1}}
+    )
+    
+    return user
 
 class YouTubeAudioExtractor:
     def __init__(self):
@@ -193,6 +286,12 @@ async def root():
             "get_audio": "/get-audio?query=your_search_query",
             "health": "/health"
         },
+        "authentication": {
+            "required": True,
+            "method": "Bearer token in Authorization header",
+            "example": "Authorization: Bearer <YOUR_API_KEY>",
+            "note": "Get your API key from the RadhaAPI dashboard"
+        },
         "status": "active"
     }
 
@@ -202,7 +301,11 @@ async def health_check():
     return {"status": "healthy", "service": "radhaapi-youtube-audio"}
 
 @app.get("/get-audio")
-async def get_audio(query: str = Query(..., min_length=1, description="YouTube search query")):
+async def get_audio(
+    request: Request,
+    query: str = Query(..., min_length=1, description="YouTube search query"),
+    user: dict = Depends(validate_api_key)
+):
     """
     Get YouTube audio stream information
     
@@ -211,6 +314,9 @@ async def get_audio(query: str = Query(..., min_length=1, description="YouTube s
         
     Returns:
         JSON response with title, duration, audio_url, and thumbnail
+        
+    Security:
+        Requires valid API key in Authorization header: Bearer <API_KEY>
     """
     try:
         if not query or query.strip() == "":
@@ -219,12 +325,24 @@ async def get_audio(query: str = Query(..., min_length=1, description="YouTube s
         # Clean the query
         query = query.strip()
         
-        logger.info(f"Processing audio request for query: {query}")
+        logger.info(f"Processing audio request for query: {query} from user: {user.get('username', 'unknown')}")
         
         # Extract audio information
         result = await extractor.search_and_extract(query)
         
-        logger.info(f"Successfully extracted audio info for: {result.get('title', 'Unknown')}")
+        # Log the API usage
+        await db.youtubeapilogs.insert_one({
+            "user": user["_id"],
+            "apiKey": user["apiKey"],
+            "query": query,
+            "userAgent": request.headers.get("user-agent", "unknown"),
+            "ipAddress": request.client.host if request.client else "unknown",
+            "status": "success",
+            "response": result,
+            "createdAt": datetime.now()
+        })
+        
+        logger.info(f"Successfully extracted audio info for: {result.get('title', 'Unknown')} (User: {user.get('username', 'unknown')})")
         
         return JSONResponse(
             status_code=200,
@@ -235,6 +353,18 @@ async def get_audio(query: str = Query(..., min_length=1, description="YouTube s
         )
         
     except HTTPException as e:
+        # Log failed attempts
+        await db.youtubeapilogs.insert_one({
+            "user": user["_id"],
+            "apiKey": user["apiKey"],
+            "query": query,
+            "userAgent": request.headers.get("user-agent", "unknown"),
+            "ipAddress": request.client.host if request.client else "unknown",
+            "status": "failed",
+            "errorMessage": e.detail,
+            "createdAt": datetime.now()
+        })
+        
         logger.error(f"HTTP error for query '{query}': {e.detail}")
         return JSONResponse(
             status_code=e.status_code,
@@ -245,6 +375,18 @@ async def get_audio(query: str = Query(..., min_length=1, description="YouTube s
             }
         )
     except Exception as e:
+        # Log unexpected errors
+        await db.youtubeapilogs.insert_one({
+            "user": user["_id"],
+            "apiKey": user["apiKey"],
+            "query": query,
+            "userAgent": request.headers.get("user-agent", "unknown"),
+            "ipAddress": request.client.host if request.client else "unknown",
+            "status": "failed",
+            "errorMessage": str(e),
+            "createdAt": datetime.now()
+        })
+        
         logger.error(f"Unexpected error for query '{query}': {str(e)}")
         return JSONResponse(
             status_code=500,
