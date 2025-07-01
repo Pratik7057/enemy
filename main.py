@@ -22,20 +22,62 @@ import motor.motor_asyncio
 # Load environment variables
 load_dotenv()
 
+# Environment settings
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+IS_PRODUCTION = ENVIRONMENT == "production"
+
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+if IS_PRODUCTION:
+    logging.basicConfig(level=logging.INFO)
+else:
+    logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="RadhaAPI YouTube Audio Streaming",
-    description="FastAPI backend for fetching YouTube audio streams for Telegram bots",
-    version="1.0.0"
+    description="FastAPI backend for fetching YouTube audio streams for Telegram bots and web applications",
+    version="1.0.0",
+    contact={
+        "name": "RadhaAPI Support",
+        "url": "https://www.radhaapi.me",
+    },
+    license_info={
+        "name": "MIT",
+    },
+    servers=[
+        {
+            "url": "https://www.radhaapi.me",
+            "description": "Production server"
+        },
+        {
+            "url": "http://localhost:8000",
+            "description": "Development server"
+        }
+    ] if IS_PRODUCTION else [
+        {
+            "url": "http://localhost:8000",
+            "description": "Development server"
+        }
+    ]
 )
 
-# CORS middleware
+# CORS middleware - production-ready configuration
+if IS_PRODUCTION:
+    allowed_origins = [
+        "https://www.radhaapi.me",
+        "https://radhaapi.me"
+    ]
+else:
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000"
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with your domain
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
@@ -54,6 +96,8 @@ async def startup_db_client():
         # Test the connection
         await client.admin.command('ping')
         logger.info(f"Connected to MongoDB: {MONGODB_URI}")
+        logger.info(f"Environment: {ENVIRONMENT}")
+        logger.info(f"FastAPI backend started successfully on https://www.radhaapi.me")
     except Exception as e:
         logger.error(f"Could not connect to MongoDB: {e}")
         raise e
@@ -282,15 +326,17 @@ async def root():
     return {
         "message": "RadhaAPI YouTube Audio Streaming Backend",
         "version": "1.0.0",
+        "website": "https://www.radhaapi.me",
         "endpoints": {
             "get_audio": "/get-audio?query=your_search_query",
-            "health": "/health"
+            "health": "/health",
+            "docs": "/docs"
         },
         "authentication": {
             "required": True,
             "method": "Bearer token in Authorization header",
             "example": "Authorization: Bearer <YOUR_API_KEY>",
-            "note": "Get your API key from the RadhaAPI dashboard"
+            "note": "Get your API key from https://www.radhaapi.me dashboard"
         },
         "status": "active"
     }
